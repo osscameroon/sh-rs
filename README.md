@@ -1,5 +1,4 @@
 # sh-rs
-![psh demo](https://github.com/RMPR/psh/raw/master/psh.gif)
 
 This is a simple "shell" made live on stream with the community. The replay is 
 available [here](https://t.me/c/1385339271/45772)
