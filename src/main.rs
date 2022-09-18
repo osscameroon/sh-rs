@@ -4,7 +4,8 @@ use std::process::Command;
 fn main() {
     loop {
         let mut command = String::new();
-        print!("> ");
+        let pwd = Command::new("pwd").output().expect("Command execution failed");
+        print!("{}> ", String::from_utf8_lossy(&pwd.stdout[..pwd.stdout.len()-1]));
         io::stdout().flush().unwrap();
         io::stdin().read_line(&mut command).expect("Error reading user input");
         let args: Vec<&str> = command[..command.len()-1].split(" ").collect();
