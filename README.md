@@ -1,4 +1,5 @@
 # sh-rs
+![psh demo](https://raw.githubusercontent.com/osscameroon/sh-rs/master/static/sh-rs.png)
 
 This is a simple "shell" made live on stream with the community. The replay is 
 available [here](https://t.me/c/1385339271/45772)
