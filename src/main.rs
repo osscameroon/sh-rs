@@ -9,7 +9,9 @@ struct Token {
     on_read: Option<Box<Token>>,
     on_success: Option<Box<Token>>,
     on_failure: Option<Box<Token>>,
-    next: Option<Box<Token>>
+    next: Option<Box<Token>>,
+    stdin: Option<String>,
+    stdout: Option<String>
 }
 
 impl Token {
@@ -21,7 +23,9 @@ impl Token {
             on_read: None,
             on_success: None,
             on_failure: None,
-            next: None
+            next: None,
+            stdin: None,
+            stdout: None
         }
     }
 }
@@ -50,15 +54,24 @@ fn parse(s: &str) {
         match c {
             ' ' | ';' => {
                 match cursor.prev_char {
-                    '|' | '&' | ' ' | ';' | '\0' => { },
+                    '|' | '&' | '<' | '>' | ' ' | ';' | '\0' => { },
                     _ => {
                         if cursor.word == "" {
                             // Do nothing!
                         } else if curr_token.cmd == None {
                             curr_token.cmd = Some(cursor.word);
+                        } else if curr_token.cmd == Some("stdin".to_owned()) {
+                            let prev_token = curr_token;
+                            curr_token = *prev_token.next.unwrap();
+                            curr_token.stdin = Some(cursor.word);
+                        } else if curr_token.cmd == Some("stdout".to_owned()) {
+                            let prev_token = curr_token;
+                            curr_token = *prev_token.next.unwrap();
+                            curr_token.stdout = Some(cursor.word);
                         } else {
                             curr_token.params.push(cursor.word);
                         }
+
                         if c == ';' {
                             tokens.push(curr_token);
                             curr_token = Token::new();
@@ -94,6 +107,12 @@ fn parse(s: &str) {
                     }
                 };
                 cursor.word = String::new();
+            },
+            '>' | '<' => {
+                let prev_token = curr_token;
+                curr_token = Token::new();
+                curr_token.cmd = Some({ if c == '>' { "stdin" } else { "stdout" } }.to_owned());
+                curr_token.next = Some(Box::new(prev_token));
             },
             '\n' => {
                 tokens.push(curr_token);

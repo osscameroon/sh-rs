@@ -12,7 +12,7 @@
 - next: The next command to execute whatever the execution status
 
 ```sh
-~/OSSCameroon/sh-rs> echo PNG Search Script; echo Search started && echo Searching... & ls | sort | head -2 | grep .png$ || echo Not Found; echo Search End;
+~/OSSCameroon/sh-rs> echo PNG Search Script; echo Search started && echo Searching... & ls | sort | head -2 | grep .png$ > result.txt || echo Not Found; echo Search End;
 ```
 ```rs   
 [
@@ -30,6 +30,8 @@
         on_success: None,
         on_failure: None,
         next: None,
+        stdin: None,
+        stdout: None,
     },
     Token {
         cmd: Some(
@@ -101,30 +103,46 @@
                                                         on_success: None,
                                                         on_failure: None,
                                                         next: None,
+                                                        stdin: None,
+                                                        stdout: None,
                                                     },
                                                 ),
                                                 on_failure: None,
                                                 next: None,
+                                                stdin: None,
+                                                stdout: None,
                                             },
                                         ),
+                                        stdin: None,
+                                        stdout: None,
                                     },
                                 ),
                                 on_success: None,
                                 on_failure: None,
                                 next: None,
+                                stdin: None,
+                                stdout: None,
                             },
                         ),
                         on_success: None,
                         on_failure: None,
                         next: None,
+                        stdin: None,
+                        stdout: None,
                     },
                 ),
                 on_success: None,
                 on_failure: None,
                 next: None,
+                stdin: Some(
+                    "result.txt",
+                ),
+                stdout: None,
             },
         ),
         next: None,
+        stdin: None,
+        stdout: None,
     },
     Token {
         cmd: Some(
@@ -139,6 +157,8 @@
         on_success: None,
         on_failure: None,
         next: None,
+        stdin: None,
+        stdout: None,
     },
     Token {
         cmd: None,
@@ -148,6 +168,8 @@
         on_success: None,
         on_failure: None,
         next: None,
+        stdin: None,
+        stdout: None,
     },
 ]
 ```
