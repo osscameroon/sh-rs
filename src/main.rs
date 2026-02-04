@@ -15,7 +15,7 @@ fn main() {
             exit(0);
         }
         if !command.is_empty() {
-            println!("{}: command not found", input);
+            println!("{}: command not found", command);
         }
         io::stdout().flush().unwrap();
     }
