@@ -16,9 +16,10 @@ fn execute_command(tokens: Vec<String>) {
         for token in &tokens[1..] {
             print!("{} ", token);
         }
+    } else {
+        let command = tokens.into_iter().collect::<String>();
+        println!("{}: command not found", command);
     }
-    let command = tokens.into_iter().collect::<String>();
-    println!("{}: command not found", command);
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let stdin = io::stdin();
