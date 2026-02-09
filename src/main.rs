@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if !command.is_empty() {
             let parsed_command = parse_command(command);
             execute_command(parsed_command);
+            io::stdout().flush().unwrap();
         }
-        io::stdout().flush().unwrap();
     }
 }
