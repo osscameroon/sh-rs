@@ -13,9 +13,10 @@ fn parse_command(command: &str) -> Vec<String> {
 
 fn execute_command(tokens: Vec<String>) {
     if tokens[0] == "echo" {
-        for token in &tokens[1..] {
+        for token in &tokens[1..tokens.len()-1] {
             print!("{} ", token);
         }
+        println!("{}", tokens[tokens.len()-1]);
     } else {
         let command = tokens.into_iter().collect::<String>();
         println!("{}: command not found", command);
@@ -25,6 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let stdin = io::stdin();
     let input = &mut String::new();
     loop {
+        io::stdout().flush().unwrap();
         print!("$ ");
         io::stdout().flush().unwrap();
         input.clear();
@@ -33,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if !command.is_empty() {
             let parsed_command = parse_command(command);
             execute_command(parsed_command);
-            io::stdout().flush().unwrap();
         }
+        io::stdout().flush().unwrap();
     }
 }
