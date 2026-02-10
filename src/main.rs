@@ -12,14 +12,24 @@ fn parse_command(command: &str) -> Vec<String> {
 }
 
 fn execute_command(tokens: Vec<String>) {
+    let sorted_builtins = vec!["echo", "exit", "type"];
     if tokens[0] == "echo" {
         for token in &tokens[1..tokens.len()-1] {
             print!("{} ", token);
         }
         println!("{}", tokens[tokens.len()-1]);
-    } else {
-        let command = tokens.into_iter().collect::<String>();
-        println!("{}: command not found", command);
+    } else if tokens[0] == "type" {
+        if tokens.len() == 1 {
+            return;
+        }
+        match sorted_builtins.binary_search(&tokens[1].as_str()) {
+            Ok(_) => println!("{} is a shell builtin", tokens[1]),
+            Err(_) => println!("{}: not found", tokens[1]),
+        }
+    }
+    else {
+        // let command = tokens.into_iter().collect::<String>();
+        println!("{}: command not found", tokens[0]);
     }
 }
 fn main() -> Result<(), Box<dyn Error>> {
