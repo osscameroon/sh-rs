@@ -1,14 +1,50 @@
 #[allow(unused_imports)]
-use std::io::{self, Write};
-use std::process::exit;
+use std::env;
 use std::error::Error;
+use std::io::{self, Write};
+use std::fs::File;
+use std::process::exit;
+use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
 
 fn parse_command(command: &str) -> Vec<String> {
     if command == "exit" {
         exit(0);
     }
+    // Should trim the splitted strings otherwise nasty stuff can happen
     let commands: Vec<String> = command.split(' ').map(String::from).collect();
     commands
+}
+
+fn parse_environment_path() -> Vec<PathBuf> {
+    match env::var_os("PATH") {
+        Some(paths) => {
+            let mut sanitized_path: Vec<PathBuf> = vec![];
+            for path in env::split_paths(&paths) {
+                if path.is_dir() {
+                    sanitized_path.push(path)
+                }
+            }
+            sanitized_path
+        }
+        None => { println!("PATH not defined in the environment"); vec![PathBuf::new()] },
+    }
+
+}
+
+fn search_environment_path(sanitized_environment_path: Vec<PathBuf>, command: String) -> Result<PathBuf, Box<dyn Error>> {
+    for path in sanitized_environment_path {
+        let full_path: PathBuf = path.join(&command);
+        if full_path.is_file() {
+            let file = File::open(&full_path)?;
+            let mode = file.metadata()?.permissions().mode();
+            let executable_mode = 0o100;
+            if (mode & executable_mode) == executable_mode {
+                return Ok(full_path)
+            }
+        }
+    }
+    Err("command not found in path".into())
 }
 
 fn execute_command(tokens: Vec<String>) {
@@ -22,9 +58,13 @@ fn execute_command(tokens: Vec<String>) {
         if tokens.len() == 1 {
             return;
         }
+        let sanitized_environment_path = parse_environment_path();
         match sorted_builtins.binary_search(&tokens[1].as_str()) {
             Ok(_) => println!("{} is a shell builtin", tokens[1]),
-            Err(_) => println!("{}: not found", tokens[1]),
+            Err(_) => match search_environment_path(sanitized_environment_path, tokens[1].clone()) {
+                Ok(executable_path) => println!("{} is {}", tokens[1], executable_path.display()),
+                Err(_) => println!("{}: not found", tokens[1]),
+            },
         }
     }
     else {
