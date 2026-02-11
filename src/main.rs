@@ -69,7 +69,7 @@ fn execute_command(tokens: Vec<String>) {
     }
     else {
         match search_environment_path(sanitized_environment_path, tokens[0].clone()) {
-            Ok(executable_path) => { Command::new(executable_path)
+            Ok(executable_path) => { Command::new(tokens[0].clone())
                 .args(&tokens[1..])
                 .status()
                 .expect("Failed to execute command");},
