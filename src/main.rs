@@ -3,7 +3,7 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Write};
 use std::fs::File;
-use std::process::exit;
+use std::process::{Command, exit};
 use std::path::PathBuf;
 use std::os::unix::fs::PermissionsExt;
 
@@ -12,7 +12,7 @@ fn parse_command(command: &str) -> Vec<String> {
         exit(0);
     }
     // Should trim the splitted strings otherwise nasty stuff can happen
-    let commands: Vec<String> = command.split(' ').map(String::from).collect();
+    let commands: Vec<String> = command.split(' ').filter(|s| *s != "").map(|s| String::from(s)).collect();
     commands
 }
 
@@ -49,6 +49,7 @@ fn search_environment_path(sanitized_environment_path: Vec<PathBuf>, command: St
 
 fn execute_command(tokens: Vec<String>) {
     let sorted_builtins = vec!["echo", "exit", "type"];
+    let sanitized_environment_path = parse_environment_path();
     if tokens[0] == "echo" {
         for token in &tokens[1..tokens.len()-1] {
             print!("{} ", token);
@@ -58,7 +59,6 @@ fn execute_command(tokens: Vec<String>) {
         if tokens.len() == 1 {
             return;
         }
-        let sanitized_environment_path = parse_environment_path();
         match sorted_builtins.binary_search(&tokens[1].as_str()) {
             Ok(_) => println!("{} is a shell builtin", tokens[1]),
             Err(_) => match search_environment_path(sanitized_environment_path, tokens[1].clone()) {
@@ -68,8 +68,13 @@ fn execute_command(tokens: Vec<String>) {
         }
     }
     else {
-        // let command = tokens.into_iter().collect::<String>();
-        println!("{}: command not found", tokens[0]);
+        match search_environment_path(sanitized_environment_path, tokens[0].clone()) {
+            Ok(executable_path) => { Command::new(executable_path)
+                .args(&tokens[1..])
+                .status()
+                .expect("Failed to execute command");},
+            Err(_) => println!("{}: command not found", tokens[0]),
+        }
     }
 }
 fn main() -> Result<(), Box<dyn Error>> {
