@@ -66,11 +66,10 @@ fn execute_command(tokens: Vec<String>) {
             },
         }
     } else if tokens[0] == "pwd" {
-        let current_dir = match env::args().next() {
-            Some(argv_0) => argv_0,
-            None => panic!(),
-        };
-        println!("{}", current_dir);
+        match env::current_dir() {
+            Ok(current_dir) => println!("{}", current_dir.display()),
+            Err(_) => panic!("Cannot determine current dir"),
+        }
     }
     else {
         match search_environment_path(sanitized_environment_path, tokens[0].clone()) {
