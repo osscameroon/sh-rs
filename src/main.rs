@@ -11,7 +11,6 @@ fn parse_command(command: &str) -> Vec<String> {
     if command == "exit" {
         exit(0);
     }
-    // Should trim the splitted strings otherwise nasty stuff can happen
     let commands: Vec<String> = command.split(' ').filter(|s| *s != "").map(|s| String::from(s)).collect();
     commands
 }
@@ -48,7 +47,7 @@ fn search_environment_path(sanitized_environment_path: Vec<PathBuf>, command: St
 }
 
 fn execute_command(tokens: Vec<String>) {
-    let sorted_builtins = vec!["echo", "exit", "type"];
+    let sorted_builtins = vec!["echo", "exit", "pwd", "type"];
     let sanitized_environment_path = parse_environment_path();
     if tokens[0] == "echo" {
         for token in &tokens[1..tokens.len()-1] {
@@ -66,6 +65,12 @@ fn execute_command(tokens: Vec<String>) {
                 Err(_) => println!("{}: not found", tokens[1]),
             },
         }
+    } else if tokens[0] == "pwd" {
+        let current_dir = match env::args().next() {
+            Some(argv_0) => argv_0,
+            None => panic!(),
+        };
+        println!("{}", current_dir);
     }
     else {
         match search_environment_path(sanitized_environment_path, tokens[0].clone()) {
