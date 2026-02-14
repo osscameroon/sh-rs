@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use rustix::process::chdir;
+use rustix::path::Arg;
 use std::env;
 use std::error::Error;
 use std::io::{self, Write};
@@ -8,7 +9,7 @@ use std::process::{Command, exit};
 use std::path::PathBuf;
 use std::os::unix::fs::PermissionsExt;
 
-fn change_directory(absolute_path: &String) -> bool {
+fn change_directory<P: Arg>(absolute_path: P) -> bool {
     match chdir(absolute_path) {
         Ok(_) => true,
         Err(_) => false,
@@ -65,6 +66,17 @@ fn execute_command(tokens: Vec<String>) {
     } else if tokens[0] == "cd" {
         if tokens.len() != 2 {
             return;
+        }
+        if tokens[1] == "~" {
+            match env::home_dir() {
+                Some(path) => {
+                    if !change_directory(&path) {
+                        println!("{}: No such file or directory", path.display());
+                    }
+                    return;
+                },
+                None => println!("Impossible to get your home dir!"),
+            }
         }
         if !change_directory(&tokens[1]) {
             println!("{}: No such file or directory", tokens[1]);
