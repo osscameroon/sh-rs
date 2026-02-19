@@ -1,4 +1,5 @@
 #[allow(unused_imports)]
+use regex::Regex;
 use rustix::process::chdir;
 use rustix::path::Arg;
 use std::env;
@@ -9,6 +10,12 @@ use std::process::{Command, exit};
 use std::path::PathBuf;
 use std::os::unix::fs::PermissionsExt;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum State {
+    OutsideSingleQuotes,
+    InsideSingleQuotes,
+}
+
 fn change_directory<P: Arg>(absolute_path: P) -> bool {
     match chdir(absolute_path) {
         Ok(_) => true,
@@ -16,11 +23,57 @@ fn change_directory<P: Arg>(absolute_path: P) -> bool {
     }
 }
 
-fn parse_command(command: &str) -> Vec<String> {
-    if command == "exit" {
-        exit(0);
+fn tokenize(input: &str) -> Vec<String> {
+    let mut state = State::OutsideSingleQuotes;
+    let mut cursor = input.chars();
+    let mut buffer = String::from("");
+    let mut tokens = vec![];
+    while let Some(c) = cursor.next() {
+        match (state, c) {
+            (State::OutsideSingleQuotes, '\'') => {
+                state = State::InsideSingleQuotes;
+                if !buffer.is_empty() {
+                    tokens.push(buffer.clone());
+                    buffer.clear();
+                }
+            },
+            (State::OutsideSingleQuotes, c) if c.is_whitespace() => {
+                if buffer.trim().is_empty() {
+                    continue
+                }
+                tokens.push(String::from(buffer.trim()));
+                buffer.clear();
+            },
+            (State::OutsideSingleQuotes, c) if c.is_ascii() => {
+                buffer.push(c);
+            },
+            (State::InsideSingleQuotes, '\'') => {
+                state = State::OutsideSingleQuotes;
+                tokens.push(buffer.clone());
+                buffer.clear();
+            },
+            (State::InsideSingleQuotes, c) if c.is_ascii() => {
+                buffer.push(c);
+            },
+            _ => todo!("patterns `(State::OutsideSingleQuotes, '\0'..='&')`, `(State::OutsideSingleQuotes, '('..='\u{d7ff}')`, `(State::OutsideSingleQuotes, '\u{e000}'..='\u{10ffff}')")
+        }
     }
-    let commands: Vec<String> = command.split(' ').filter(|s| *s != "").map(|s| String::from(s)).collect();
+    if !buffer.is_empty() {
+        tokens.push(buffer.clone());
+    }
+    tokens
+}
+
+fn parse_command(command: &str) -> Vec<String> {
+    let re = Regex::new(r"(?<command_name>\s*\S+\s*)(?<arguments>.*)").unwrap();
+    let Some(capture) = re.captures(command) else {
+        println!("No match");
+        return vec![String::from("")];
+    };
+    let mut commands: Vec<String> = vec![String::from(capture["command_name"].trim())];
+    if !capture["arguments"].is_empty() {
+        commands.extend(tokenize(&capture["arguments"]));
+    }
     commands
 }
 
@@ -58,6 +111,9 @@ fn search_environment_path(sanitized_environment_path: Vec<PathBuf>, command: St
 fn execute_command(tokens: Vec<String>) {
     let sorted_builtins = vec!["cd", "echo", "exit", "pwd", "type"];
     let sanitized_environment_path = parse_environment_path();
+    if tokens[0] == "exit" {
+        exit(0);
+    }
     if tokens[0] == "echo" {
         for token in &tokens[1..tokens.len()-1] {
             print!("{} ", token);
