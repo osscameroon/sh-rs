@@ -72,8 +72,10 @@ fn parse_command(command: &str) -> Vec<String> {
     };
     let mut commands: Vec<String> = vec![String::from(capture["command_name"].trim())];
     if !capture["arguments"].is_empty() {
-        commands.extend(tokenize(&capture["arguments"]));
+        let arguments = capture["arguments"].replace("''", "");
+        commands.extend(tokenize(&arguments.as_str()));
     }
+    println!("{:?}", commands);
     commands
 }
 
