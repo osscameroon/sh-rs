@@ -75,7 +75,6 @@ fn parse_command(command: &str) -> Vec<String> {
         let arguments = capture["arguments"].replace("''", "");
         commands.extend(tokenize(&arguments.as_str()));
     }
-    println!("{:?}", commands);
     commands
 }
 
