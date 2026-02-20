@@ -14,6 +14,8 @@ use std::os::unix::fs::PermissionsExt;
 enum State {
     OutsideSingleQuotes,
     InsideSingleQuotes,
+    OutsideDoubleQuotes,
+    InsideDoubleQuotes,
 }
 
 fn change_directory<P: Arg>(absolute_path: P) -> bool {
@@ -24,12 +26,34 @@ fn change_directory<P: Arg>(absolute_path: P) -> bool {
 }
 
 fn tokenize(input: &str) -> Vec<String> {
-    let mut state = State::OutsideSingleQuotes;
+    let mut state = State::OutsideDoubleQuotes;
     let mut cursor = input.chars();
     let mut buffer = String::from("");
     let mut tokens = vec![];
     while let Some(c) = cursor.next() {
         match (state, c) {
+            (State::InsideDoubleQuotes, c) if c.is_whitespace() => {
+                buffer.push(c);
+            }
+            (State::OutsideDoubleQuotes, '"') => {
+                state = State::InsideDoubleQuotes;
+                if !buffer.is_empty() {
+                    tokens.push(buffer.clone());
+                    buffer.clear();
+                }
+            }
+            (State::InsideDoubleQuotes, '"') => {
+                state = State::OutsideDoubleQuotes;
+                tokens.push(buffer.clone());
+                buffer.clear();
+            }
+            (State::OutsideDoubleQuotes, c) if c.is_whitespace() => {
+                if buffer.trim().is_empty() {
+                    continue
+                }
+                tokens.push(String::from(buffer.trim()));
+                buffer.clear();
+            },
             (State::OutsideSingleQuotes, '\'') => {
                 state = State::InsideSingleQuotes;
                 if !buffer.is_empty() {
@@ -55,7 +79,7 @@ fn tokenize(input: &str) -> Vec<String> {
             (State::InsideSingleQuotes, c) if c.is_ascii() => {
                 buffer.push(c);
             },
-            _ => todo!("patterns `(State::OutsideSingleQuotes, '\0'..='&')`, `(State::OutsideSingleQuotes, '('..='\u{d7ff}')`, `(State::OutsideSingleQuotes, '\u{e000}'..='\u{10ffff}')")
+            _ => { buffer.push(c); },
         }
     }
     if !buffer.is_empty() {
@@ -73,7 +97,7 @@ fn parse_command(command: &str) -> Vec<String> {
     let mut commands: Vec<String> = vec![String::from(capture["command_name"].trim())];
     if !capture["arguments"].is_empty() {
         let arguments = capture["arguments"].replace("''", "");
-        commands.extend(tokenize(&arguments.as_str()));
+        commands.extend(tokenize(&arguments.replace("\"\"", "").as_str()));
     }
     commands
 }
