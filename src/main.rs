@@ -27,8 +27,8 @@ fn change_directory<P: Arg>(absolute_path: P) -> bool {
 
 fn tokenize(input: &str) -> Vec<String> {
     let mut state = match input.find('"') {
-        Some(pos_single_quote) => match input.find('\'') {
-            Some(pos_double_quote) =>
+        Some(pos_double_quote) => match input.find('\'') {
+            Some(pos_single_quote) =>
             {
                 if pos_single_quote < pos_double_quote {
                     State::OutsideSingleQuotes
