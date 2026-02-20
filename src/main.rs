@@ -26,11 +26,28 @@ fn change_directory<P: Arg>(absolute_path: P) -> bool {
 }
 
 fn tokenize(input: &str) -> Vec<String> {
-    let mut state = State::OutsideDoubleQuotes;
+    let mut state = match input.find('"') {
+        Some(pos_single_quote) => match input.find('\'') {
+            Some(pos_double_quote) =>
+            {
+                if pos_single_quote < pos_double_quote {
+                    State::OutsideSingleQuotes
+                } else {
+                    State::OutsideDoubleQuotes
+                }
+            },
+            None => State::OutsideDoubleQuotes,
+        },
+        None => State::OutsideSingleQuotes,
+    };
     let mut cursor = input.chars();
     let mut buffer = String::from("");
     let mut tokens = vec![];
     while let Some(c) = cursor.next() {
+        // I wonder at which point I will have to write an actual parser
+        // This doesn't support being inside DoubleQuotes and inside Single Quotes
+        // $ echo "hello 'me' is"
+        // "hello me is"
         match (state, c) {
             (State::InsideDoubleQuotes, c) if c.is_whitespace() => {
                 buffer.push(c);
