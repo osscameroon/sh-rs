@@ -49,6 +49,9 @@ fn tokenize(input: &str) -> Vec<String> {
         // $ echo "hello 'me' is"
         // "hello me is"
         match (state, c) {
+            (State::InsideSingleQuotes, '\\') => {
+                buffer.push(c);
+            },
             (_, '\\') => {
                 match cursor.next(){
                     Some(c) => buffer.push(c),
