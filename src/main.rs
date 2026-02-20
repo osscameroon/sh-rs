@@ -49,6 +49,12 @@ fn tokenize(input: &str) -> Vec<String> {
         // $ echo "hello 'me' is"
         // "hello me is"
         match (state, c) {
+            (_, '\\') => {
+                match cursor.next(){
+                    Some(c) => buffer.push(c),
+                    None => break,
+                };
+            }
             (State::InsideDoubleQuotes, c) if c.is_whitespace() => {
                 buffer.push(c);
             }
