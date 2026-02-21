@@ -44,10 +44,6 @@ fn tokenize(input: &str) -> Vec<String> {
     let mut buffer = String::from("");
     let mut tokens = vec![];
     while let Some(c) = cursor.next() {
-        // I wonder at which point I will have to write an actual parser
-        // This doesn't support being inside DoubleQuotes and inside Single Quotes
-        // $ echo "hello 'me' is"
-        // "hello me is"
         match (state, c) {
             (State::InsideSingleQuotes, '\\') => {
                 buffer.push(c);
@@ -70,8 +66,8 @@ fn tokenize(input: &str) -> Vec<String> {
             }
             (State::InsideDoubleQuotes, '"') => {
                 state = State::OutsideDoubleQuotes;
-                tokens.push(buffer.clone());
-                buffer.clear();
+                // tokens.push(buffer.clone());
+                // buffer.clear();
             }
             (State::OutsideDoubleQuotes, c) if c.is_whitespace() => {
                 if buffer.trim().is_empty() {
