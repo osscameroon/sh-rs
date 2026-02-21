@@ -83,8 +83,12 @@ fn tokenize(input: &str) -> Vec<String> {
             (State::OutsideSingleQuotes, '\'') => {
                 state = State::InsideSingleQuotes;
                 if !buffer.is_empty() {
-                    tokens.push(buffer.clone());
-                    buffer.clear();
+                    if buffer.as_str().ends_with(|c: char| {c.is_whitespace()}) {
+                        tokens.push(buffer.clone());
+                        buffer.clear();
+                    } else {
+                        continue;
+                    }
                 }
             },
             (State::OutsideSingleQuotes, c) if c.is_whitespace() => {
