@@ -121,14 +121,9 @@ fn tokenize(input: &str) -> Vec<String> {
 }
 
 fn parse_command(command: &str) -> Vec<String> {
-    let re = Regex::new(r"(?<command_name>\s*\S+\s*)(?<arguments>.*)").unwrap();
-    let Some(capture) = re.captures(command) else {
-        println!("No match");
-        return vec![String::from("")];
-    };
-    let mut commands: Vec<String> = vec![String::from(capture["command_name"].trim())];
-    if !capture["arguments"].is_empty() {
-        let arguments = capture["arguments"].replace("''", "");
+    let mut commands: Vec<String> = vec![];
+    if !command.is_empty() {
+        let arguments = command.replace("''", "");
         commands.extend(tokenize(&arguments.replace("\"\"", "").as_str()));
     }
     commands
