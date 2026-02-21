@@ -60,8 +60,14 @@ fn tokenize(input: &str) -> Vec<String> {
             (State::OutsideDoubleQuotes, '"') => {
                 state = State::InsideDoubleQuotes;
                 if !buffer.is_empty() {
-                    tokens.push(buffer.clone());
-                    buffer.clear();
+                    if !buffer.is_empty() {
+                        if buffer.as_str().ends_with(|c: char| {c.is_whitespace()}) {
+                            tokens.push(buffer.clone());
+                            buffer.clear();
+                        } else {
+                            continue;
+                        }
+                    }
                 }
             }
             (State::InsideDoubleQuotes, '"') => {
