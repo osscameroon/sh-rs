@@ -4,10 +4,10 @@ use rustix::path::Arg;
 use rustix::process::chdir;
 use std::env;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{File, create_dir_all};
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,7 +126,12 @@ fn tokenize(input: &str) -> (Vec<String>, String) {
                             redirect_state = State::Redirect;
                         } else {
                             buffer.push('1');
-                            buffer.push(c);
+                            if c.is_whitespace() {
+                                tokens.push(buffer.clone());
+                                buffer.clear();
+                            } else {
+                                buffer.push(c);
+                            }
                         }
                     }
                     None => buffer.push('1'),
@@ -166,7 +171,7 @@ fn parse_command(command: &str) -> (Vec<String>, String) {
     if !command.is_empty() {
         let (arguments, output_file) =
             tokenize(&command.replace("''", "").replace("\"\"", "").as_str());
-        //println!("Args: {:?}, Output: {}", arguments, output_file);
+        // println!("Args: {:?}, Output: {}", arguments, output_file);
         commands.extend(arguments);
         return (commands, output_file);
     }
@@ -185,7 +190,7 @@ fn parse_environment_path() -> Vec<PathBuf> {
             sanitized_path
         }
         None => {
-            println!("PATH not defined in the environment");
+            eprintln!("PATH not defined in the environment");
             vec![PathBuf::new()]
         }
     }
@@ -213,6 +218,10 @@ fn make_writer(dest: String) -> io::Result<Box<dyn Write>> {
     if dest == "" {
         return Ok(Box::new(io::stdout().lock()));
     } else {
+        let path = Path::new(dest.as_str());
+        if let Some(parent) = path.parent() {
+            create_dir_all(parent)?;
+        }
         return Ok(Box::new(File::create(dest)?));
     }
 }
