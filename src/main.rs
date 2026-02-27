@@ -11,13 +11,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum State {
-    OutsideSingleQuotes,
-    InsideSingleQuotes,
-    OutsideDoubleQuotes,
-    InsideDoubleQuotes,
-    Redirect,
-    NoRedirect,
+enum QuoteState {
+    Unquoted,
+    SingleQuoted,
+    DoubleQuoted,
 }
 
 fn change_directory<P: Arg>(absolute_path: P) -> bool {
@@ -28,150 +25,126 @@ fn change_directory<P: Arg>(absolute_path: P) -> bool {
 }
 
 fn tokenize(input: &str) -> (Vec<String>, String) {
-    let mut state = match input.find('"') {
-        Some(pos_double_quote) => match input.find('\'') {
-            Some(pos_single_quote) => {
-                if pos_single_quote < pos_double_quote {
-                    State::OutsideSingleQuotes
-                } else {
-                    State::OutsideDoubleQuotes
+    let mut quote_state = QuoteState::Unquoted;
+    let mut chars = input.chars().peekable();
+    let mut buffer = String::new();
+    let mut tokens: Vec<String> = vec![];
+    let mut in_token = false;
+    let mut redirect = false;
+    let mut output_file = String::new();
+
+    while let Some(c) = chars.next() {
+        match quote_state {
+            QuoteState::Unquoted => match c {
+                '\'' => {
+                    quote_state = QuoteState::SingleQuoted;
+                    in_token = true; // even empty quotes produce a token part
                 }
-            }
-            None => State::OutsideDoubleQuotes,
-        },
-        None => State::OutsideSingleQuotes,
-    };
-    let mut cursor = input.chars();
-    let mut buffer = String::from("");
-    let mut tokens = vec![];
-    let mut redirect_state = State::NoRedirect;
-    let mut output_file = String::from("");
-    while let Some(c) = cursor.next() {
-        match (state, c) {
-            (State::InsideSingleQuotes, '\\') => {
-                buffer.push(c);
-            }
-            (_, '\\') => {
-                match cursor.next() {
-                    Some(c) => buffer.push(c),
-                    None => break,
-                };
-            }
-            (State::InsideDoubleQuotes, c) if c.is_whitespace() => {
-                buffer.push(c);
-            }
-            (State::OutsideDoubleQuotes, '"') => {
-                state = State::InsideDoubleQuotes;
-                if !buffer.is_empty() {
-                    if buffer.as_str().ends_with(|c: char| c.is_whitespace()) {
-                        if redirect_state == State::Redirect {
-                            redirect_state = State::NoRedirect;
+                '"' => {
+                    quote_state = QuoteState::DoubleQuoted;
+                    in_token = true;
+                }
+                '\\' => {
+                    // backslash escapes the next character
+                    if let Some(next) = chars.next() {
+                        buffer.push(next);
+                        in_token = true;
+                    }
+                }
+                c if c.is_whitespace() => {
+                    if in_token {
+                        if redirect {
+                            redirect = false;
                             output_file = buffer.clone();
                         } else {
                             tokens.push(buffer.clone());
                         }
                         buffer.clear();
-                    } else {
-                        continue;
+                        in_token = false;
                     }
                 }
-            }
-            (State::InsideDoubleQuotes, '"') => {
-                state = State::OutsideDoubleQuotes;
-            }
-            (State::OutsideDoubleQuotes, c) if c.is_whitespace() => {
-                if buffer.trim().is_empty() {
-                    continue;
-                }
-                if redirect_state == State::Redirect {
-                    redirect_state = State::NoRedirect;
-                    output_file = String::from(buffer.trim());
-                } else {
-                    tokens.push(String::from(buffer.trim()));
-                }
-                buffer.clear();
-            }
-            (State::OutsideSingleQuotes, '\'') => {
-                state = State::InsideSingleQuotes;
-                if !buffer.is_empty() {
-                    if buffer.as_str().ends_with(|c: char| c.is_whitespace()) {
-                        if redirect_state == State::Redirect {
-                            redirect_state = State::NoRedirect;
-                            output_file = buffer.clone();
-                        } else {
-                            tokens.push(buffer.clone());
-                        }
+                '>' => {
+                    // flush current token if any
+                    if in_token {
+                        tokens.push(buffer.clone());
                         buffer.clear();
+                        in_token = false;
+                    }
+                    redirect = true;
+                }
+                '1' => {
+                    // check for 1> redirect (only if not already in a token)
+                    if !in_token {
+                        if chars.peek() == Some(&'>') {
+                            chars.next(); // consume '>'
+                            redirect = true;
+                        } else {
+                            buffer.push(c);
+                            in_token = true;
+                        }
                     } else {
-                        continue;
+                        buffer.push(c);
                     }
                 }
-            }
-            (State::OutsideSingleQuotes, c) if c.is_whitespace() => {
-                if buffer.trim().is_empty() {
-                    continue;
+                _ => {
+                    buffer.push(c);
+                    in_token = true;
                 }
-                if redirect_state == State::Redirect {
-                    redirect_state = State::NoRedirect;
-                    output_file = String::from(buffer.trim());
-                } else {
-                    tokens.push(String::from(buffer.trim()));
+            },
+            QuoteState::SingleQuoted => match c {
+                '\'' => {
+                    // close single quote — everything inside is literal
+                    quote_state = QuoteState::Unquoted;
                 }
-                buffer.clear();
-            }
-            (_, '1') => {
-                match cursor.next() {
-                    Some(c) => {
-                        if c == '>' {
-                            redirect_state = State::Redirect;
-                        } else {
-                            buffer.push('1');
-                            if c.is_whitespace() {
-                                tokens.push(buffer.clone());
-                                buffer.clear();
-                            } else {
-                                buffer.push(c);
+                _ => {
+                    buffer.push(c);
+                }
+            },
+            QuoteState::DoubleQuoted => match c {
+                '"' => {
+                    // close double quote
+                    quote_state = QuoteState::Unquoted;
+                }
+                '\\' => {
+                    // inside double quotes, backslash only escapes: $ ` " \ newline
+                    if let Some(&next) = chars.peek() {
+                        match next {
+                            '$' | '`' | '"' | '\\' | '\n' => {
+                                chars.next();
+                                buffer.push(next);
+                            }
+                            _ => {
+                                // backslash is literal
+                                buffer.push('\\');
                             }
                         }
+                    } else {
+                        buffer.push('\\');
                     }
-                    None => buffer.push('1'),
-                };
-            }
-            (_, '>') => {
-                redirect_state = State::Redirect;
-            }
-            (State::OutsideSingleQuotes, c) if c.is_ascii() => {
-                buffer.push(c);
-            }
-            (State::InsideSingleQuotes, '\'') => {
-                state = State::OutsideSingleQuotes;
-                tokens.push(buffer.clone());
-                buffer.clear();
-            }
-            (State::InsideSingleQuotes, c) if c.is_ascii() => {
-                buffer.push(c);
-            }
-            _ => {
-                buffer.push(c);
-            }
+                }
+                _ => {
+                    buffer.push(c);
+                }
+            },
         }
     }
-    if !buffer.is_empty() {
-        if redirect_state == State::Redirect {
-            output_file = buffer.clone();
+
+    // flush remaining buffer
+    if in_token || !buffer.is_empty() {
+        if redirect {
+            output_file = buffer;
         } else {
-            tokens.push(buffer.clone());
+            tokens.push(buffer);
         }
     }
+
     (tokens, output_file)
 }
 
 fn parse_command(command: &str) -> (Vec<String>, String) {
     let mut commands: Vec<String> = vec![];
     if !command.is_empty() {
-        let (arguments, output_file) =
-            tokenize(&command.replace("''", "").replace("\"\"", "").as_str());
-        // println!("Args: {:?}, Output: {}", arguments, output_file);
+        let (arguments, output_file) = tokenize(command);
         commands.extend(arguments);
         return (commands, output_file);
     }
