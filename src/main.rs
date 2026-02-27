@@ -286,16 +286,16 @@ fn execute_command(
     } else {
         match search_environment_path(sanitized_environment_path, tokens[0].clone()) {
             Ok(_) => {
-                writer.write_all(
-                    Command::new(tokens[0].clone())
-                        .args(&tokens[1..])
-                        .output()
-                        .expect("Failed to execute command")
-                        .stdout
-                        .as_slice(),
-                )?;
+                let output = Command::new(tokens[0].clone())
+                    .args(&tokens[1..])
+                    .output()
+                    .expect("Failed to execute command");
+                writer.write_all(output.stdout.as_slice())?;
+                if !output.stderr.is_empty() {
+                    eprintln!("{}", output.stderr.as_str()?);
+                };
             }
-            Err(_) => eprintln!("{}: command not found", tokens[0]),
+            Err(_) => eprint!("{}: command not found", tokens[0]),
         }
     }
     Ok(())
