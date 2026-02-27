@@ -1,14 +1,14 @@
 #[allow(unused_imports)]
 use regex::Regex;
-use rustix::process::chdir;
 use rustix::path::Arg;
+use rustix::process::chdir;
 use std::env;
 use std::error::Error;
-use std::io::{self, Write};
 use std::fs::File;
-use std::process::{Command, exit};
-use std::path::PathBuf;
+use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
+use std::process::{Command, exit};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
@@ -16,6 +16,8 @@ enum State {
     InsideSingleQuotes,
     OutsideDoubleQuotes,
     InsideDoubleQuotes,
+    Redirect,
+    NoRedirect,
 }
 
 fn change_directory<P: Arg>(absolute_path: P) -> bool {
@@ -25,17 +27,16 @@ fn change_directory<P: Arg>(absolute_path: P) -> bool {
     }
 }
 
-fn tokenize(input: &str) -> Vec<String> {
+fn tokenize(input: &str) -> (Vec<String>, String) {
     let mut state = match input.find('"') {
         Some(pos_double_quote) => match input.find('\'') {
-            Some(pos_single_quote) =>
-            {
+            Some(pos_single_quote) => {
                 if pos_single_quote < pos_double_quote {
                     State::OutsideSingleQuotes
                 } else {
                     State::OutsideDoubleQuotes
                 }
-            },
+            }
             None => State::OutsideDoubleQuotes,
         },
         None => State::OutsideSingleQuotes,
@@ -43,13 +44,15 @@ fn tokenize(input: &str) -> Vec<String> {
     let mut cursor = input.chars();
     let mut buffer = String::from("");
     let mut tokens = vec![];
+    let mut redirect_state = State::NoRedirect;
+    let mut output_file = String::from("");
     while let Some(c) = cursor.next() {
         match (state, c) {
             (State::InsideSingleQuotes, '\\') => {
                 buffer.push(c);
-            },
+            }
             (_, '\\') => {
-                match cursor.next(){
+                match cursor.next() {
                     Some(c) => buffer.push(c),
                     None => break,
                 };
@@ -60,73 +63,114 @@ fn tokenize(input: &str) -> Vec<String> {
             (State::OutsideDoubleQuotes, '"') => {
                 state = State::InsideDoubleQuotes;
                 if !buffer.is_empty() {
-                    if !buffer.is_empty() {
-                        if buffer.as_str().ends_with(|c: char| {c.is_whitespace()}) {
-                            tokens.push(buffer.clone());
-                            buffer.clear();
+                    if buffer.as_str().ends_with(|c: char| c.is_whitespace()) {
+                        if redirect_state == State::Redirect {
+                            redirect_state = State::NoRedirect;
+                            output_file = buffer.clone();
                         } else {
-                            continue;
+                            tokens.push(buffer.clone());
                         }
-                    }
-                }
-            }
-            (State::InsideDoubleQuotes, '"') => {
-                state = State::OutsideDoubleQuotes;
-                // tokens.push(buffer.clone());
-                // buffer.clear();
-            }
-            (State::OutsideDoubleQuotes, c) if c.is_whitespace() => {
-                if buffer.trim().is_empty() {
-                    continue
-                }
-                tokens.push(String::from(buffer.trim()));
-                buffer.clear();
-            },
-            (State::OutsideSingleQuotes, '\'') => {
-                state = State::InsideSingleQuotes;
-                if !buffer.is_empty() {
-                    if buffer.as_str().ends_with(|c: char| {c.is_whitespace()}) {
-                        tokens.push(buffer.clone());
                         buffer.clear();
                     } else {
                         continue;
                     }
                 }
-            },
+            }
+            (State::InsideDoubleQuotes, '"') => {
+                state = State::OutsideDoubleQuotes;
+            }
+            (State::OutsideDoubleQuotes, c) if c.is_whitespace() => {
+                if buffer.trim().is_empty() {
+                    continue;
+                }
+                if redirect_state == State::Redirect {
+                    redirect_state = State::NoRedirect;
+                    output_file = String::from(buffer.trim());
+                } else {
+                    tokens.push(String::from(buffer.trim()));
+                }
+                buffer.clear();
+            }
+            (State::OutsideSingleQuotes, '\'') => {
+                state = State::InsideSingleQuotes;
+                if !buffer.is_empty() {
+                    if buffer.as_str().ends_with(|c: char| c.is_whitespace()) {
+                        if redirect_state == State::Redirect {
+                            redirect_state = State::NoRedirect;
+                            output_file = buffer.clone();
+                        } else {
+                            tokens.push(buffer.clone());
+                        }
+                        buffer.clear();
+                    } else {
+                        continue;
+                    }
+                }
+            }
             (State::OutsideSingleQuotes, c) if c.is_whitespace() => {
                 if buffer.trim().is_empty() {
-                    continue
+                    continue;
                 }
-                tokens.push(String::from(buffer.trim()));
+                if redirect_state == State::Redirect {
+                    redirect_state = State::NoRedirect;
+                    output_file = String::from(buffer.trim());
+                } else {
+                    tokens.push(String::from(buffer.trim()));
+                }
                 buffer.clear();
-            },
+            }
+            (_, '1') => {
+                match cursor.next() {
+                    Some(c) => {
+                        if c == '>' {
+                            redirect_state = State::Redirect;
+                        } else {
+                            buffer.push('1');
+                            buffer.push(c);
+                        }
+                    }
+                    None => buffer.push('1'),
+                };
+            }
+            (_, '>') => {
+                redirect_state = State::Redirect;
+            }
             (State::OutsideSingleQuotes, c) if c.is_ascii() => {
                 buffer.push(c);
-            },
+            }
             (State::InsideSingleQuotes, '\'') => {
                 state = State::OutsideSingleQuotes;
                 tokens.push(buffer.clone());
                 buffer.clear();
-            },
+            }
             (State::InsideSingleQuotes, c) if c.is_ascii() => {
                 buffer.push(c);
-            },
-            _ => { buffer.push(c); },
+            }
+            _ => {
+                buffer.push(c);
+            }
         }
     }
     if !buffer.is_empty() {
-        tokens.push(buffer.clone());
+        if redirect_state == State::Redirect {
+            output_file = buffer.clone();
+        } else {
+            tokens.push(buffer.clone());
+        }
     }
-    tokens
+    (tokens, output_file)
 }
 
-fn parse_command(command: &str) -> Vec<String> {
+fn parse_command(command: &str) -> (Vec<String>, String) {
     let mut commands: Vec<String> = vec![];
     if !command.is_empty() {
-        let arguments = command.replace("''", "");
-        commands.extend(tokenize(&arguments.replace("\"\"", "").as_str()));
+        let (arguments, output_file) =
+            tokenize(&command.replace("''", "").replace("\"\"", "").as_str());
+        //println!("Args: {:?}, Output: {}", arguments, output_file);
+        commands.extend(arguments);
+        return (commands, output_file);
     }
-    commands
+    (commands, String::from(""))
 }
 
 fn parse_environment_path() -> Vec<PathBuf> {
@@ -140,12 +184,17 @@ fn parse_environment_path() -> Vec<PathBuf> {
             }
             sanitized_path
         }
-        None => { println!("PATH not defined in the environment"); vec![PathBuf::new()] },
+        None => {
+            println!("PATH not defined in the environment");
+            vec![PathBuf::new()]
+        }
     }
-
 }
 
-fn search_environment_path(sanitized_environment_path: Vec<PathBuf>, command: String) -> Result<PathBuf, Box<dyn Error>> {
+fn search_environment_path(
+    sanitized_environment_path: Vec<PathBuf>,
+    command: String,
+) -> Result<PathBuf, Box<dyn Error>> {
     for path in sanitized_environment_path {
         let full_path: PathBuf = path.join(&command);
         if full_path.is_file() {
@@ -153,70 +202,94 @@ fn search_environment_path(sanitized_environment_path: Vec<PathBuf>, command: St
             let mode = file.metadata()?.permissions().mode();
             let executable_mode = 0o100;
             if (mode & executable_mode) == executable_mode {
-                return Ok(full_path)
+                return Ok(full_path);
             }
         }
     }
     Err("command not found in path".into())
 }
 
-fn execute_command(tokens: Vec<String>) {
+fn make_writer(dest: String) -> io::Result<Box<dyn Write>> {
+    if dest == "" {
+        return Ok(Box::new(io::stdout().lock()));
+    } else {
+        return Ok(Box::new(File::create(dest)?));
+    }
+}
+
+fn execute_command(
+    tokens: Vec<String>,
+    output_file: String,
+) -> Result<(), Box<dyn std::error::Error>> {
     let sorted_builtins = vec!["cd", "echo", "exit", "pwd", "type"];
     let sanitized_environment_path = parse_environment_path();
+    let mut writer = make_writer(output_file)?;
     if tokens[0] == "exit" {
         exit(0);
     }
     if tokens[0] == "echo" {
-        for token in &tokens[1..tokens.len()-1] {
-            print!("{} ", token);
+        for token in &tokens[1..tokens.len() - 1] {
+            writer.write_all(format!("{} ", token).as_bytes())?;
         }
-        println!("{}", tokens[tokens.len()-1]);
+        writer.write_all(format!("{}\n", tokens[tokens.len() - 1]).as_bytes())?;
     } else if tokens[0] == "cd" {
-        if tokens.len() != 2 {
-            return;
+        if tokens.len() > 2 {
+            eprintln!("cd: too many arguments");
         }
         if tokens[1] == "~" {
             match env::home_dir() {
                 Some(path) => {
                     if !change_directory(&path) {
-                        println!("{}: No such file or directory", path.display());
+                        writer.write_all(
+                            format!("{}: No such file or directory", path.display()).as_bytes(),
+                        )?;
                     }
-                    return;
-                },
-                None => println!("Impossible to get your home dir!"),
+                }
+                None => eprintln!("cd: Impossible to get your home dir!"),
             }
         }
         if !change_directory(&tokens[1]) {
-            println!("{}: No such file or directory", tokens[1]);
+            eprintln!("{}: No such file or directory", tokens[1]);
         }
     } else if tokens[0] == "type" {
         if tokens.len() == 1 {
-            return;
+            return Ok(());
         }
         match sorted_builtins.binary_search(&tokens[1].as_str()) {
-            Ok(_) => println!("{} is a shell builtin", tokens[1]),
-            Err(_) => match search_environment_path(sanitized_environment_path, tokens[1].clone()) {
-                Ok(executable_path) => {
-                    let executable_path: PathBuf = executable_path;
-                    println!("{} is {}", tokens[1], executable_path.display());
-                },
-                Err(_) => println!("{}: not found", tokens[1]),
-            },
-        }
+            Ok(_) => writer.write_all(format!("{} is a shell builtin", tokens[1]).as_bytes())?,
+            Err(_) => {
+                match search_environment_path(sanitized_environment_path, tokens[1].clone()) {
+                    Ok(executable_path) => {
+                        let executable_path: PathBuf = executable_path;
+                        writer.write_all(
+                            format!("{} is {}", tokens[1], executable_path.display()).as_bytes(),
+                        )?;
+                    }
+                    Err(_) => eprintln!("{}: not found", tokens[1]),
+                }
+            }
+        };
     } else if tokens[0] == "pwd" {
         match env::current_dir() {
-            Ok(current_dir) => println!("{}", current_dir.display()),
+            Ok(current_dir) => writer.write_all(format!("{}", current_dir.display()).as_bytes())?,
             Err(_) => panic!("Cannot determine current dir"),
         }
     } else {
         match search_environment_path(sanitized_environment_path, tokens[0].clone()) {
-            Ok(_) => { Command::new(tokens[0].clone())
-                .args(&tokens[1..])
-                .status()
-                .expect("Failed to execute command");},
-            Err(_) => println!("{}: command not found", tokens[0]),
+            Ok(_) => {
+                writer.write_all(
+                    Command::new(tokens[0].clone())
+                        .args(&tokens[1..])
+                        .output()
+                        .expect("Failed to execute command")
+                        .stdout
+                        .as_slice(),
+                )?;
+            }
+            Err(_) => eprintln!("{}: command not found", tokens[0]),
         }
     }
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -230,8 +303,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         stdin.read_line(input).unwrap();
         let command = input.trim();
         if !command.is_empty() {
-            let parsed_command = parse_command(command);
-            execute_command(parsed_command);
+            let (parsed_command, output_file) = parse_command(command);
+            execute_command(parsed_command, output_file)?;
         }
         io::stdout().flush().unwrap();
     }
