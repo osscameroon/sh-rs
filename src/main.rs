@@ -292,7 +292,7 @@ fn execute_command(
                     .expect("Failed to execute command");
                 writer.write_all(output.stdout.as_slice())?;
                 if !output.stderr.is_empty() {
-                    eprintln!("{}", output.stderr.as_str()?);
+                    eprint!("{}", output.stderr.as_str()?);
                 };
             }
             Err(_) => eprint!("{}: command not found", tokens[0]),
