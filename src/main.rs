@@ -238,13 +238,13 @@ fn execute_command(
             return Ok(());
         }
         match sorted_builtins.binary_search(&tokens[1].as_str()) {
-            Ok(_) => writer.write_all(format!("{} is a shell builtin", tokens[1]).as_bytes())?,
+            Ok(_) => writer.write_all(format!("{} is a shell builtin\n", tokens[1]).as_bytes())?,
             Err(_) => {
                 match search_environment_path(sanitized_environment_path, tokens[1].clone()) {
                     Ok(executable_path) => {
                         let executable_path: PathBuf = executable_path;
                         writer.write_all(
-                            format!("{} is {}", tokens[1], executable_path.display()).as_bytes(),
+                            format!("{} is {}\n", tokens[1], executable_path.display()).as_bytes(),
                         )?;
                     }
                     Err(_) => eprintln!("{}: not found", tokens[1]),
@@ -253,7 +253,9 @@ fn execute_command(
         };
     } else if tokens[0] == "pwd" {
         match env::current_dir() {
-            Ok(current_dir) => writer.write_all(format!("{}", current_dir.display()).as_bytes())?,
+            Ok(current_dir) => {
+                writer.write_all(format!("{}\n", current_dir.display()).as_bytes())?
+            }
             Err(_) => panic!("Cannot determine current dir"),
         }
     } else {
@@ -268,7 +270,7 @@ fn execute_command(
                     eprint!("{}", output.stderr.as_str()?);
                 };
             }
-            Err(_) => eprint!("{}: command not found", tokens[0]),
+            Err(_) => eprint!("{}: command not found\n", tokens[0]),
         }
     }
     Ok(())
