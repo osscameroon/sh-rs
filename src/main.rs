@@ -215,22 +215,20 @@ fn execute_command(
         }
         writer.write_all(format!("{}\n", tokens[tokens.len() - 1]).as_bytes())?;
     } else if tokens[0] == "cd" {
-        if tokens.len() > 2 {
-            eprintln!("cd: too many arguments");
+        if tokens.len() != 2 {
+            eprintln!("cd: wrong number of arguments");
+            return Ok(());
         }
         if tokens[1] == "~" {
             match env::home_dir() {
                 Some(path) => {
                     if !change_directory(&path) {
-                        writer.write_all(
-                            format!("{}: No such file or directory", path.display()).as_bytes(),
-                        )?;
+                        eprintln!("{}: No such file or directory", path.display());
                     }
                 }
                 None => eprintln!("cd: Impossible to get your home dir!"),
             }
-        }
-        if !change_directory(&tokens[1]) {
+        } else if !change_directory(&tokens[1]) {
             eprintln!("{}: No such file or directory", tokens[1]);
         }
     } else if tokens[0] == "type" {
