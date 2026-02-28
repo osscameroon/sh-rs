@@ -1,35 +1,76 @@
-[![progress-banner](https://backend.codecrafters.io/progress/shell/1b514b02-4004-4c0d-80df-938cab44c109)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# sh-rs
 
-This is a starting point for Rust solutions to the
-["Build Your Own Shell" Challenge](https://app.codecrafters.io/courses/shell/overview).
+This is an implementation of the standard shell in Rust. It is still a work in progress, but it is already usable for basic tasks.
 
-In this challenge, you'll build your own POSIX compliant shell that's capable of
-interpreting shell commands, running external programs and builtin commands like
-cd, pwd, echo and more. Along the way, you'll learn about shell command parsing,
-REPLs, builtin commands, and more.
+## Implemented
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+- Print a prompt
+- Handle invalid commands
+- Implement a REPL
+- Implement exit
+- Implement echo
+- Implement type
+- Locate executable files
+- Run a program
+- Base stages complete!
 
-# Passing the first stage
+### Navigation
 
-The entry point for your `shell` implementation is in `src/main.rs`. Study and
-uncomment the relevant code, and push your changes to pass the first stage:
+- The pwd builtin
+- The cd builtin: Absolute paths
+- The cd builtin: Relative paths
+- The cd builtin: Home directory
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
-```
+### Redirection
 
-Time to move on to the next stage!
+- Redirect stdout
 
-# Stage 2 & beyond
+## Remaining
 
-Note: This section is for stages 2 and beyond.
+### Redirection
 
-1. Ensure you have `cargo (1.92)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main.rs`. This command compiles your Rust project, so it might be slow
-   the first time you run it. Subsequent runs will be fast.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+- Redirect stderr
+- Append stdout
+- Append stderr 
+
+### Command Completion
+
+- Builtin completion
+- Completion with arguments
+- Missing completions
+- Executable completion
+- Multiple completions
+- Partial completions 
+
+### Pipelines
+
+- Dual-command pipeline
+- Pipelines with built-ins
+- Multi-command pipelines
+
+### History
+
+- Listing history
+- Limiting history entries
+- Up-arrow navigation
+- Down-arrow navigation
+- Executing commands from history
+
+### History Persistence
+
+- Read history from file
+- Write history to file
+- Append history to file
+- Read history on startup
+- Write history on exit
+- Append history on exit
+
+### Filename Completion
+
+- File completion
+- Nested file completion
+- Directory completion
+- Missing completions
+- Multiple matches
+- Partial completions
+- Multi-argument completions
