@@ -24,14 +24,16 @@ fn change_directory<P: Arg>(absolute_path: P) -> bool {
     }
 }
 
-fn tokenize(input: &str) -> (Vec<String>, String) {
+fn tokenize(input: &str) -> (Vec<String>, String, String) {
     let mut quote_state = QuoteState::Unquoted;
     let mut chars = input.chars().peekable();
     let mut buffer = String::new();
     let mut tokens: Vec<String> = vec![];
     let mut in_token = false;
-    let mut redirect = false;
-    let mut output_file = String::new();
+    let mut redirect_stdout = false;
+    let mut redirect_stderr = false;
+    let mut standard_output_file = String::new();
+    let mut standard_error_file = String::new();
 
     while let Some(c) = chars.next() {
         match quote_state {
@@ -53,14 +55,31 @@ fn tokenize(input: &str) -> (Vec<String>, String) {
                 }
                 c if c.is_whitespace() => {
                     if in_token {
-                        if redirect {
-                            redirect = false;
-                            output_file = buffer.clone();
+                        if redirect_stdout {
+                            redirect_stdout = false;
+                            standard_output_file = buffer.clone();
+                        } else if redirect_stderr {
+                            redirect_stderr = false;
+                            standard_error_file = buffer.clone();
                         } else {
                             tokens.push(buffer.clone());
                         }
                         buffer.clear();
                         in_token = false;
+                    }
+                }
+                '2' => {
+                    // check for 2> redirect (only if not already in a token)
+                    if !in_token {
+                        if chars.peek() == Some(&'>') {
+                            chars.next(); // consume '>'
+                            redirect_stderr = true;
+                        } else {
+                            buffer.push(c);
+                            in_token = true;
+                        }
+                    } else {
+                        buffer.push(c);
                     }
                 }
                 '>' => {
@@ -70,14 +89,14 @@ fn tokenize(input: &str) -> (Vec<String>, String) {
                         buffer.clear();
                         in_token = false;
                     }
-                    redirect = true;
+                    redirect_stdout = true;
                 }
                 '1' => {
                     // check for 1> redirect (only if not already in a token)
                     if !in_token {
                         if chars.peek() == Some(&'>') {
                             chars.next(); // consume '>'
-                            redirect = true;
+                            redirect_stdout = true;
                         } else {
                             buffer.push(c);
                             in_token = true;
@@ -131,24 +150,26 @@ fn tokenize(input: &str) -> (Vec<String>, String) {
 
     // flush remaining buffer
     if in_token || !buffer.is_empty() {
-        if redirect {
-            output_file = buffer;
+        if redirect_stdout {
+            standard_output_file = buffer;
+        } else if redirect_stderr {
+            standard_error_file = buffer;
         } else {
             tokens.push(buffer);
         }
     }
 
-    (tokens, output_file)
+    (tokens, standard_output_file, standard_error_file)
 }
 
-fn parse_command(command: &str) -> (Vec<String>, String) {
+fn parse_command(command: &str) -> (Vec<String>, String, String) {
     let mut commands: Vec<String> = vec![];
     if !command.is_empty() {
-        let (arguments, output_file) = tokenize(command);
+        let (arguments, standard_output_file, standard_error_file) = tokenize(command);
         commands.extend(arguments);
-        return (commands, output_file);
+        return (commands, standard_output_file, standard_error_file);
     }
-    (commands, String::from(""))
+    (commands, String::from(""), String::from(""))
 }
 
 fn parse_environment_path() -> Vec<PathBuf> {
@@ -187,9 +208,11 @@ fn search_environment_path(
     Err("command not found in path".into())
 }
 
-fn make_writer(dest: String) -> io::Result<Box<dyn Write>> {
-    if dest == "" {
+fn make_writer(dest: String, stderr: bool) -> io::Result<Box<dyn Write>> {
+    if dest == "" && !stderr {
         return Ok(Box::new(io::stdout().lock()));
+    } else if dest == "" && stderr {
+        return Ok(Box::new(io::stderr().lock()));
     } else {
         let path = Path::new(dest.as_str());
         if let Some(parent) = path.parent() {
@@ -201,11 +224,13 @@ fn make_writer(dest: String) -> io::Result<Box<dyn Write>> {
 
 fn execute_command(
     tokens: Vec<String>,
-    output_file: String,
+    standard_output_file: String,
+    standard_error_file: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let sorted_builtins = vec!["cd", "echo", "exit", "pwd", "type"];
     let sanitized_environment_path = parse_environment_path();
-    let mut writer = make_writer(output_file)?;
+    let mut writer = make_writer(standard_output_file, false)?;
+    let mut error_writer = make_writer(standard_error_file, true)?;
     if tokens[0] == "exit" {
         exit(0);
     }
@@ -216,20 +241,23 @@ fn execute_command(
         writer.write_all(format!("{}\n", tokens[tokens.len() - 1]).as_bytes())?;
     } else if tokens[0] == "cd" {
         if tokens.len() != 2 {
-            eprintln!("cd: wrong number of arguments");
+            error_writer.write_all(b"cd: wrong number of arguments")?;
             return Ok(());
         }
         if tokens[1] == "~" {
             match env::home_dir() {
                 Some(path) => {
                     if !change_directory(&path) {
-                        eprintln!("{}: No such file or directory", path.display());
+                        error_writer.write_all(
+                            format!("{}: No such file or directory", path.display()).as_bytes(),
+                        )?;
                     }
                 }
-                None => eprintln!("cd: Impossible to get your home dir!"),
+                None => error_writer.write_all(b"cd: Impossible to get your home dir!")?,
             }
         } else if !change_directory(&tokens[1]) {
-            eprintln!("{}: No such file or directory", tokens[1]);
+            error_writer
+                .write_all(format!("{}: No such file or directory", tokens[1]).as_bytes())?;
         }
     } else if tokens[0] == "type" {
         if tokens.len() == 1 {
@@ -245,7 +273,9 @@ fn execute_command(
                             format!("{} is {}\n", tokens[1], executable_path.display()).as_bytes(),
                         )?;
                     }
-                    Err(_) => eprintln!("{}: not found", tokens[1]),
+                    Err(_) => {
+                        error_writer.write_all(format!("{}: not found", tokens[1]).as_bytes())?
+                    }
                 }
             }
         };
@@ -265,10 +295,12 @@ fn execute_command(
                     .expect("Failed to execute command");
                 writer.write_all(output.stdout.as_slice())?;
                 if !output.stderr.is_empty() {
-                    eprint!("{}", output.stderr.as_str()?);
+                    error_writer.write_all(&output.stderr.as_slice())?;
                 };
             }
-            Err(_) => eprint!("{}: command not found\n", tokens[0]),
+            Err(_) => {
+                error_writer.write_all(format!("{}: command not found\n", tokens[0]).as_bytes())?;
+            }
         }
     }
     Ok(())
@@ -285,8 +317,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         stdin.read_line(input).unwrap();
         let command = input.trim();
         if !command.is_empty() {
-            let (parsed_command, output_file) = parse_command(command);
-            execute_command(parsed_command, output_file)?;
+            let (parsed_command, standard_output_file, standard_error_file) =
+                parse_command(command);
+            execute_command(parsed_command, standard_output_file, standard_error_file)?;
         }
         io::stdout().flush().unwrap();
     }
