@@ -257,7 +257,7 @@ fn execute_command(
             }
         } else if !change_directory(&tokens[1]) {
             error_writer
-                .write_all(format!("{}: No such file or directory", tokens[1]).as_bytes())?;
+                .write_all(format!("cd: {}: No such file or directory\n", tokens[1]).as_bytes())?;
         }
     } else if tokens[0] == "type" {
         if tokens.len() == 1 {
