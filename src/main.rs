@@ -241,7 +241,7 @@ fn execute_command(
         writer.write_all(format!("{}\n", tokens[tokens.len() - 1]).as_bytes())?;
     } else if tokens[0] == "cd" {
         if tokens.len() != 2 {
-            error_writer.write_all(b"cd: wrong number of arguments")?;
+            error_writer.write_all(b"cd: wrong number of arguments\n")?;
             return Ok(());
         }
         if tokens[1] == "~" {
@@ -249,11 +249,11 @@ fn execute_command(
                 Some(path) => {
                     if !change_directory(&path) {
                         error_writer.write_all(
-                            format!("{}: No such file or directory", path.display()).as_bytes(),
+                            format!("{}: No such file or directory\n", path.display()).as_bytes(),
                         )?;
                     }
                 }
-                None => error_writer.write_all(b"cd: Impossible to get your home dir!")?,
+                None => error_writer.write_all(b"cd: Impossible to get your home dir!\n")?,
             }
         } else if !change_directory(&tokens[1]) {
             error_writer
@@ -274,7 +274,7 @@ fn execute_command(
                         )?;
                     }
                     Err(_) => {
-                        error_writer.write_all(format!("{}: not found", tokens[1]).as_bytes())?
+                        error_writer.write_all(format!("{}: not found\n", tokens[1]).as_bytes())?
                     }
                 }
             }
@@ -295,7 +295,7 @@ fn execute_command(
                     .expect("Failed to execute command");
                 writer.write_all(output.stdout.as_slice())?;
                 if !output.stderr.is_empty() {
-                    error_writer.write_all(&output.stderr.as_slice())?;
+                    error_writer.write_all(output.stderr.as_slice())?;
                 };
             }
             Err(_) => {
